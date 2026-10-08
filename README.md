@@ -1,16 +1,15 @@
 # caesar
 
-A small CalDAV + CardDAV server for personal use. It stores raw iCalendar and
-vCard files on disk and never parses them. Built for Thunderbird and
+A small CalDAV + CardDAV server for personal use. Built for Thunderbird and
 DAVx⁵.
 
 ## Setup
 
-caesar has no authentication of its own. It sits behind a reverse proxy
-that terminates TLS, checks a Basic auth password on every request and
-**always overwrites** the `Remote-User` header with the authenticated
-username. caesar listens on a Unix socket that only the proxy's group can
-connect to, so nothing else on the machine can claim to be a user.
+caesar has no authentication of its own; it sits behind a reverse proxy that
+terminates TLS, checks a Basic auth password on every request and **always
+overwrites** the `Remote-User` header with the authenticated username. caesar
+listens on a Unix socket that only the proxy's group can connect to, so nothing
+else on the machine can claim to be a user.
 
 Add the flake input and module:
 
@@ -30,8 +29,8 @@ Add the flake input and module:
 ```
 
 This gives a socket-activated service on `/run/caesar.sock` with data in
-`/var/lib/caesar`. Point DNS for your subdomain at the machine and open
-ports 80 and 443.
+`/var/lib/caesar`. Point DNS for your subdomain at the machine and open ports 80
+and 443.
 
 ### Caddy
 
@@ -95,16 +94,16 @@ per user. Caddy fetches the TLS certificate itself.
 ```
 
 Create the password file with
-`nix shell nixpkgs#apacheHttpd -c htpasswd -cB caesar-htpasswd alice`
-(drop `-c` to add users) and put it at the path above, readable by nginx.
-Keep it out of the Nix store, e.g. with sops-nix or agenix.
+`nix shell nixpkgs#apacheHttpd -c htpasswd -cB caesar-htpasswd alice` (drop `-c`
+to add users) and put it at the path above, readable by nginx. Keep it out of
+the Nix store, e.g. with sops-nix or agenix.
 
 ### Other proxies
 
-Anything works that requires Basic auth on every request, sets
-`Remote-User` from the authenticated user (replacing any value the client
-sent) and can proxy to a Unix socket. Login flows that redirect to a web
-page don't work: CalDAV and CardDAV clients only do Basic auth.
+Anything works that requires Basic auth on every request, sets `Remote-User`
+from the authenticated user (replacing any value the client sent) and can proxy
+to a Unix socket. Login flows that redirect to a web page don't work: CalDAV and
+CardDAV clients only do Basic auth.
 
 ### Check and connect
 
@@ -118,8 +117,8 @@ calendar and address book are created on their first request. Logs:
 
 - **DAVx⁵**: tap "+", choose "Login with URL and user name" and enter
   `https://dav.example.com`.
-- **Thunderbird calendars**: create a new calendar "On the Network" with
-  the location `https://dav.example.com`.
+- **Thunderbird calendars**: create a new calendar "On the Network" with the
+  location `https://dav.example.com`.
 - **Thunderbird contacts**: add a CardDAV address book with the same URL.
 
 ## Data
@@ -130,8 +129,8 @@ calendar and address book are created on their first request. Logs:
 ```
 
 Each collection has a `.props.toml` (name, colour, description) and a
-`.sync.log`. Back up the directory with anything that copies files. Only
-edit it while caesar is stopped; changes are picked up on the next start.
+`.sync.log`. Back up the directory with anything that copies files. Only edit it
+while caesar is stopped; changes are picked up on the next start.
 
 Deleted collections are moved to `<user>/.trash/`.
 
@@ -149,4 +148,4 @@ caesar only listens on a Unix socket: either the one systemd passes it or
 
 ## License
 
-[EUPL-1.2](LICENSE)
+[EUPL-1.2](./LICENSE)
