@@ -29,7 +29,7 @@ use axum::{
 };
 use tracing::{error, warn};
 
-use self::target::Target;
+use self::{methods::Create, target::Target};
 use crate::{
   store::{self, Collection, CollectionId, Store},
   xml::{self, DAV, Node, node},
@@ -39,8 +39,8 @@ use crate::{
 const MAX_BODY: usize = 10 * 1024 * 1024;
 
 const DAV_HEADER: &str = "1, 3, calendar-access, addressbook, extended-mkcol";
-const ALLOW: &str =
-  "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, REPORT";
+const ALLOW: &str = "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, \
+                     MKCOL, MKCALENDAR, REPORT";
 
 pub async fn handle(store: &Mutex<Store>, request: Request) -> Response {
   let (parts, body) = request.into_parts();
@@ -106,7 +106,8 @@ fn run(
     "DELETE" => methods::delete(&mut ctx, target),
     "PROPFIND" => methods::propfind(&mut ctx, target, body),
     "PROPPATCH" => methods::proppatch(&mut ctx, target, body),
-    "MKCOL" => methods::mkcol(&mut ctx, target, body),
+    "MKCOL" => methods::create(&mut ctx, target, body, Create::Mkcol),
+    "MKCALENDAR" => methods::create(&mut ctx, target, body, Create::Mkcalendar),
     "REPORT" => report::report(&mut ctx, target, body),
     _ => Err(Error::Status(StatusCode::METHOD_NOT_ALLOWED)),
   }

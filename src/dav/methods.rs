@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
-//! `GET`, `PUT`, `DELETE`, `PROPFIND`, `PROPPATCH` and `MKCOL`.
+//! `GET`, `PUT`, `DELETE`, `PROPFIND`, `PROPPATCH`, `MKCOL` and
+//! `MKCALENDAR`.
 
 use axum::{
   http::{HeaderMap, HeaderValue, StatusCode, header},
@@ -19,7 +20,7 @@ use super::{
 use crate::{
   props::Props,
   store::Kind,
-  xml::{self, CALDAV, DAV, Element, ICAL, Node, node},
+  xml::{self, CALDAV, DAV, Element, ICAL, Node, QName, node},
 };
 
 pub fn get(ctx: &mut Ctx, target: &Target) -> Result {
@@ -128,14 +129,44 @@ pub fn proppatch(ctx: &mut Ctx, target: &Target, body: &[u8]) -> Result {
   ]))
 }
 
-/// Extended MKCOL (RFC 5689) for calendars and address books.
-pub fn mkcol(ctx: &mut Ctx, target: &Target, body: &[u8]) -> Result {
+/// The two ways to create a collection. Their bodies only differ in element
+/// names.
+#[derive(Clone, Copy)]
+pub enum Create {
+  /// Extended MKCOL (RFC 5689), for calendars and address books.
+  Mkcol,
+  /// MKCALENDAR (RFC 4791), for calendars only.
+  Mkcalendar,
+}
+
+impl Create {
+  /// Request and response root elements.
+  const fn elements(self) -> (QName, QName) {
+    match self {
+      Self::Mkcol => ((DAV, "mkcol"), (DAV, "mkcol-response")),
+      Self::Mkcalendar => {
+        ((CALDAV, "mkcalendar"), (CALDAV, "mkcalendar-response"))
+      },
+    }
+  }
+}
+
+pub fn create(
+  ctx: &mut Ctx,
+  target: &Target,
+  body: &[u8],
+  method: Create,
+) -> Result {
   let Target::Collection(id) = target else {
     return Err(Error::Status(StatusCode::FORBIDDEN));
   };
+  if matches!(method, Create::Mkcalendar) && id.kind != Kind::Calendar {
+    return Err(Error::Status(StatusCode::FORBIDDEN));
+  }
+  let ((root_ns, root_name), (response_ns, response_name)) = method.elements();
   let mut props = Props::default();
   let root =
-    parse_body(body, DAV, "mkcol", StatusCode::UNSUPPORTED_MEDIA_TYPE)?;
+    parse_body(body, root_ns, root_name, StatusCode::UNSUPPORTED_MEDIA_TYPE)?;
   if let Some(root) = root {
     let mut outcome = Outcome::default();
     for prop in root.children_named(DAV, "set").flat_map(props_in) {
@@ -144,7 +175,7 @@ pub fn mkcol(ctx: &mut Ctx, target: &Target, body: &[u8]) -> Result {
     if !outcome.succeeded() {
       return Ok(xml_response(
         StatusCode::FORBIDDEN,
-        &node(DAV, "mkcol-response").children(outcome.propstats()),
+        &node(response_ns, response_name).children(outcome.propstats()),
       ));
     }
   }
@@ -202,7 +233,7 @@ fn set_prop(
   true
 }
 
-/// Like `set_prop`, plus the properties only `MKCOL` may set.
+/// Like `set_prop`, plus the properties only collection creation may set.
 fn set_initial_prop(props: &mut Props, kind: Kind, prop: &Element) -> bool {
   let collection_type = spec(kind).collection_type;
   if prop.is(DAV, "resourcetype") {
@@ -221,12 +252,20 @@ fn set_initial_prop(props: &mut Props, kind: Kind, prop: &Element) -> bool {
       .collect();
     props.components = Some(components);
     true
+  } else if kind == Kind::Calendar
+    && (prop.is(CALDAV, "calendar-timezone")
+      || prop.is(CALDAV, "calendar-timezone-id"))
+  {
+    // DAVx⁵ sends the device's time zone. It's only a default for floating
+    // times, which caesar never interprets, so it's accepted and dropped.
+    true
   } else {
     set_prop(props, kind, prop, Some(prop.text.clone()))
   }
 }
 
-/// Per-property results of an all-or-nothing `PROPPATCH` or `MKCOL`.
+/// Per-property results of an all-or-nothing `PROPPATCH`, `MKCOL` or
+/// `MKCALENDAR`.
 #[derive(Default)]
 struct Outcome {
   accepted: Vec<Node>,
